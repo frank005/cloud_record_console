@@ -28,6 +28,10 @@
     <!-- Recording Control Panel -->
     <div id="leftPanel" class="bg-gray-800 p-6 rounded-lg shadow-lg">
       <h1 class="text-xl font-bold mb-4 text-center">Agora Cloud Recording</h1>
+      <p class="text-sm text-gray-400 mb-4">
+        <b>Note:</b> Channel name, UID, and S3 credentials are required. For Web Page Recording, URL is also required.
+        All other fields will use recommended defaults if left blank.
+      </p>
       <div class="space-y-4">
         <!-- Basic fields -->
         <input id="cname" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Channel Name (cname)" />
@@ -65,6 +69,11 @@
     <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
       <h1 class="text-xl font-bold mb-4 text-center">Query Recording</h1>
       
+      <p class="text-sm text-gray-400 mb-3">
+        If you enter Resource ID and SID here, they will also be used for Update and Stop requests if the checkbox below is checked. 
+        Otherwise, the system will use the IDs from the previously acquired or started session.
+      </p>
+
       <!-- Resource ID / SID -->
       <input id="resourceId" class="w-full p-2 mb-2 rounded bg-gray-700 text-white" placeholder="Resource ID" />
       <input id="sid" class="w-full p-2 mb-2 rounded bg-gray-700 text-white" placeholder="Session ID (SID)" />
