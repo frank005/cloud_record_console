@@ -64,9 +64,23 @@
     <!-- Query Panel -->
     <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
       <h1 class="text-xl font-bold mb-4 text-center">Query Recording</h1>
+      
+      <!-- Resource ID / SID -->
       <input id="resourceId" class="w-full p-2 mb-2 rounded bg-gray-700 text-white" placeholder="Resource ID" />
       <input id="sid" class="w-full p-2 mb-2 rounded bg-gray-700 text-white" placeholder="Session ID (SID)" />
-      <button id="queryBtn" class="w-full bg-blue-600 hover:bg-blue-700 p-2 rounded font-bold mb-2">Query</button>
+      
+      <!-- Checkbox to pick which IDs to use for Update/Stop -->
+      <label class="flex items-center mb-2 text-sm">
+        <input type="checkbox" id="useManualResSid" class="mr-2 h-4 w-4" />
+        Use these values for Update/Stop calls?
+      </label>
+
+      <!-- Query button -->
+      <button id="queryBtn" class="w-full bg-blue-600 hover:bg-blue-700 p-2 rounded font-bold mb-2">
+        Query
+      </button>
+      
+      <!-- Query results -->
       <pre id="queryResult" class="p-2 bg-gray-700 rounded text-sm min-h-[200px]"></pre>
     </div>
   </div>
@@ -139,6 +153,26 @@
     const customerId = document.getElementById("customerId").value.trim();
     const customerSecret = document.getElementById("customerSecret").value.trim();
     return "Basic " + btoa(customerId + ":" + customerSecret);
+  }
+
+  /* ---------------- GET ACTIVE RESOURCE & SID ---------------- */
+  // This will check if the user wants to use manual ResourceId/SID from the query panel
+  // or the globally stored resourceId/sid (globalResourceId, globalSid).
+  function getActiveResourceAndSid() {
+    const useManual = document.getElementById("useManualResSid").checked;
+    if (useManual) {
+      const manualResId = document.getElementById("resourceId").value.trim();
+      const manualSid = document.getElementById("sid").value.trim();
+      return {
+        resourceId: manualResId,
+        sid: manualSid
+      };
+    } else {
+      return {
+        resourceId: globalResourceId,
+        sid: globalSid
+      };
+    }
   }
 
   /* ---------------- MODE & UI ---------------- */
@@ -276,14 +310,13 @@
     return globalMode === "composite" ? "mix" : globalMode;
   }
 
-  // Parse integer with default
+  // parse integer with default
   function intVal(id, def) {
     const str = document.getElementById(id)?.value.trim() || "";
     const val = parseInt(str, 10);
     return isNaN(val) ? def : val;
   }
-
-  // Convert comma-separated string to array
+  // convert comma-separated string to array
   function arrayVal(id) {
     const str = document.getElementById(id)?.value.trim() || "";
     if (!str) return [];
@@ -686,7 +719,10 @@
     responseEl.textContent = "Updating recording...";
 
     const appid = document.getElementById("appid").value.trim();
-    if (!globalResourceId || !globalSid) {
+
+    // Decide which resourceId / sid to use
+    const { resourceId, sid } = getActiveResourceAndSid();
+    if (!resourceId || !sid) {
       responseEl.textContent = "Error: resourceId or sid is empty. Start a recording first.";
       return;
     }
@@ -694,7 +730,7 @@
     const body = buildUpdateBody();
     const urlMode = getUrlMode();
     // POST for update
-    const url = `https://api.agora.io/v1/apps/${appid}/cloud_recording/resourceid/${globalResourceId}/sid/${globalSid}/mode/${urlMode}/update`;
+    const url = `https://api.agora.io/v1/apps/${appid}/cloud_recording/resourceid/${resourceId}/sid/${sid}/mode/${urlMode}/update`;
 
     try {
       const resp = await fetch(url, {
@@ -721,13 +757,15 @@
     const uid = document.getElementById("uid").value.trim();
     const appid = document.getElementById("appid").value.trim();
 
-    if (!globalResourceId || !globalSid) {
+    // Decide which resourceId / sid to use
+    const { resourceId, sid } = getActiveResourceAndSid();
+    if (!resourceId || !sid) {
       responseEl.textContent = "Error: resourceId or sid is empty. Start a recording first.";
       return;
     }
 
     const urlMode = getUrlMode();
-    const url = `https://api.agora.io/v1/apps/${appid}/cloud_recording/resourceid/${globalResourceId}/sid/${globalSid}/mode/${urlMode}/stop`;
+    const url = `https://api.agora.io/v1/apps/${appid}/cloud_recording/resourceid/${resourceId}/sid/${sid}/mode/${urlMode}/stop`;
     const body = {
       cname,
       uid,
@@ -754,6 +792,8 @@
   async function queryRecording() {
     const queryResultEl = document.getElementById("queryResult");
     const appid = document.getElementById("appid").value.trim();
+
+    // For queries, we'll always read from the Query panel fields first, or fallback to global
     const resourceId = document.getElementById("resourceId").value.trim() || globalResourceId;
     const sid = document.getElementById("sid").value.trim() || globalSid;
 
