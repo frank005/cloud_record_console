@@ -436,41 +436,45 @@
     }
 
     function getWebFieldsHTML() {
-      return `
-        <p class="text-sm font-semibold">Start Configs (Web):</p>
-        <!-- Removed webToken input; using common token input -->
-        <input id="webUrl" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Web URL"/>
-        <input id="webMaxRecordingHour" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Max Recording Hour (default=3)"/>
-        <p class="text-sm font-semibold">Web Recorder Service Config:</p>
-        <input id="webAudioProfile" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Audio Profile (0=default)"/>
-        <input id="webVideoWidth" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Width (1280)"/>
-        <input id="webVideoHeight" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Height (720)"/>
-        <p class="text-sm font-semibold">Storage (for Start only):</p>
-        <input id="webAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
-        <input id="webSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
-        <input id="webBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
-        <label class="block text-sm font-semibold">Vendor:</label>
-        <select id="webVendor" class="w-full p-2 rounded bg-gray-700 text-white" onchange="updateStorageRegion('web')">
-          <option value="1" selected>Amazon S3</option>
-          <option value="2">Alibaba Cloud</option>
-          <option value="3">Tencent Cloud</option>
-          <option value="5">Microsoft Azure</option>
-          <option value="6">Google Cloud</option>
-          <option value="7">Huawei Cloud</option>
-          <option value="8">Baidu Smart Cloud</option>
-        </select>
-        <label class="block text-sm font-semibold">Region:</label>
-        <select id="webRegion" class="w-full p-2 rounded bg-gray-700 text-white"></select>
-        <input id="webFileNamePrefix" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="File Name Prefix (comma-separated)"/>
-        <hr class="border-gray-600 my-2" />
-        <p class="text-sm font-semibold">Update (Web):</p>
-        <p class="text-sm">Only toggles onHold (true/false).</p>
-        <div class="flex items-center">
-          <input type="checkbox" id="webOnHoldCheckbox" class="mr-2 h-4 w-4" />
-          <label for="webOnHoldCheckbox" class="text-sm">onHold?</label>
-        </div>
-      `;
-    }
+  return `
+    <p class="text-sm font-semibold">Start Configs (Web):</p>
+    <input id="webUrl" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Web URL"/>
+    <input id="webMaxRecordingHour" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Max Recording Hour (default=3)"/>
+    <p class="text-sm font-semibold">Web Recorder Service Config:</p>
+    <label class="block text-sm font-semibold">Audio Profile:</label>
+    <select id="webAudioProfile" class="w-full p-2 rounded bg-gray-700 text-white">
+      <option value="0" selected>0: 48kHz, mono, ~48 Kbps (Default)</option>
+      <option value="1">1: 48kHz, mono, ~128 Kbps</option>
+      <option value="2">2: 48kHz, stereo, ~192 Kbps</option>
+    </select>
+    <input id="webVideoWidth" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Width (1280)"/>
+    <input id="webVideoHeight" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Height (720)"/>
+    <p class="text-sm font-semibold">Storage (for Start only):</p>
+    <input id="webAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
+    <input id="webSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
+    <input id="webBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
+    <label class="block text-sm font-semibold">Vendor:</label>
+    <select id="webVendor" class="w-full p-2 rounded bg-gray-700 text-white" onchange="updateStorageRegion('web')">
+      <option value="1" selected>Amazon S3</option>
+      <option value="2">Alibaba Cloud</option>
+      <option value="3">Tencent Cloud</option>
+      <option value="5">Microsoft Azure</option>
+      <option value="6">Google Cloud</option>
+      <option value="7">Huawei Cloud</option>
+      <option value="8">Baidu Smart Cloud</option>
+    </select>
+    <label class="block text-sm font-semibold">Region:</label>
+    <select id="webRegion" class="w-full p-2 rounded bg-gray-700 text-white"></select>
+    <input id="webFileNamePrefix" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="File Name Prefix (comma-separated)"/>
+    <hr class="border-gray-600 my-2" />
+    <p class="text-sm font-semibold">Update (Web):</p>
+    <p class="text-sm">Only toggles onHold (true/false).</p>
+    <div class="flex items-center">
+      <input type="checkbox" id="webOnHoldCheckbox" class="mr-2 h-4 w-4" />
+      <label for="webOnHoldCheckbox" class="text-sm">onHold?</label>
+    </div>
+  `;
+}
 
     // Returns the mode part for the URL
     function getUrlMode() {
