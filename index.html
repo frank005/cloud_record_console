@@ -14,6 +14,33 @@
       word-wrap: break-word;
       overflow-x: auto;
     }
+    /* Cloud animation styles */
+    @keyframes flyCloud {
+      0% {
+        transform: translateX(-150px);
+        opacity: 0;
+      }
+      10% {
+        opacity: 1;
+      }
+      90% {
+        opacity: 1;
+      }
+      100% {
+        transform: translateX(110vw);
+        opacity: 0;
+      }
+    }
+    .cloud-animation {
+      position: fixed;
+      top: 20px;
+      left: -150px;
+      width: 64px;
+      height: 64px;
+      pointer-events: none;
+      animation: flyCloud 3s linear forwards;
+      z-index: 10000;
+    }
   </style>
 </head>
 <body class="bg-gray-900 text-white min-h-screen py-10 px-4">
@@ -317,7 +344,7 @@
     function getCompositeFieldsHTML() {
       return `
         <p class="text-sm font-semibold">Start Configs (Composite):</p>
-        <!-- Removed compositeToken input; using common token input instead -->
+        <!-- Using common token input above; no separate composite token -->
         <input id="compositeMaxIdleTime" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Max Idle Time (default=30)"/>
         <label class="block text-sm font-semibold">Stream Types:</label>
         <select id="compositeStreamTypes" class="w-full p-2 rounded bg-gray-700 text-white">
@@ -387,7 +414,7 @@
     function getIndividualFieldsHTML() {
       return `
         <p class="text-sm font-semibold">Start Configs (Individual):</p>
-        <!-- Removed individualToken input; using common token input -->
+        <!-- Using common token input; no separate individual token -->
         <input id="individualMaxIdleTime" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Max Idle Time (default=30)"/>
         <label class="block text-sm font-semibold">Stream Types:</label>
         <select id="individualStreamTypes" class="w-full p-2 rounded bg-gray-700 text-white">
@@ -415,6 +442,7 @@
         <p class="text-sm font-semibold">Storage (for Start only):</p>
         <input id="individualAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
         <input id="individualSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
+        <!-- Moved Bucket above vendor/region -->
         <input id="individualBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
         <label class="block text-sm font-semibold">Vendor:</label>
         <select id="individualVendor" class="w-full p-2 rounded bg-gray-700 text-white" onchange="updateStorageRegion('individual')">
@@ -436,45 +464,47 @@
     }
 
     function getWebFieldsHTML() {
-  return `
-    <p class="text-sm font-semibold">Start Configs (Web):</p>
-    <input id="webUrl" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Web URL"/>
-    <input id="webMaxRecordingHour" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Max Recording Hour (default=3)"/>
-    <p class="text-sm font-semibold">Web Recorder Service Config:</p>
-    <label class="block text-sm font-semibold">Audio Profile:</label>
-    <select id="webAudioProfile" class="w-full p-2 rounded bg-gray-700 text-white">
-      <option value="0" selected>0: 48kHz, mono, ~48 Kbps (Default)</option>
-      <option value="1">1: 48kHz, mono, ~128 Kbps</option>
-      <option value="2">2: 48kHz, stereo, ~192 Kbps</option>
-    </select>
-    <input id="webVideoWidth" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Width (1280)"/>
-    <input id="webVideoHeight" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Height (720)"/>
-    <p class="text-sm font-semibold">Storage (for Start only):</p>
-    <input id="webAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
-    <input id="webSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
-    <input id="webBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
-    <label class="block text-sm font-semibold">Vendor:</label>
-    <select id="webVendor" class="w-full p-2 rounded bg-gray-700 text-white" onchange="updateStorageRegion('web')">
-      <option value="1" selected>Amazon S3</option>
-      <option value="2">Alibaba Cloud</option>
-      <option value="3">Tencent Cloud</option>
-      <option value="5">Microsoft Azure</option>
-      <option value="6">Google Cloud</option>
-      <option value="7">Huawei Cloud</option>
-      <option value="8">Baidu Smart Cloud</option>
-    </select>
-    <label class="block text-sm font-semibold">Region:</label>
-    <select id="webRegion" class="w-full p-2 rounded bg-gray-700 text-white"></select>
-    <input id="webFileNamePrefix" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="File Name Prefix (comma-separated)"/>
-    <hr class="border-gray-600 my-2" />
-    <p class="text-sm font-semibold">Update (Web):</p>
-    <p class="text-sm">Only toggles onHold (true/false).</p>
-    <div class="flex items-center">
-      <input type="checkbox" id="webOnHoldCheckbox" class="mr-2 h-4 w-4" />
-      <label for="webOnHoldCheckbox" class="text-sm">onHold?</label>
-    </div>
-  `;
-}
+      return `
+        <p class="text-sm font-semibold">Start Configs (Web):</p>
+        <!-- Using common token input; no separate web token -->
+        <input id="webUrl" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Web URL"/>
+        <input id="webMaxRecordingHour" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Max Recording Hour (default=3)"/>
+        <p class="text-sm font-semibold">Web Recorder Service Config:</p>
+        <label class="block text-sm font-semibold">Audio Profile:</label>
+        <select id="webAudioProfile" class="w-full p-2 rounded bg-gray-700 text-white">
+          <option value="0" selected>0: 48kHz, mono, ~48 Kbps (Default)</option>
+          <option value="1">1: 48kHz, mono, ~128 Kbps</option>
+          <option value="2">2: 48kHz, stereo, ~192 Kbps</option>
+        </select>
+        <input id="webVideoWidth" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Width (1280)"/>
+        <input id="webVideoHeight" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Height (720)"/>
+        <p class="text-sm font-semibold">Storage (for Start only):</p>
+        <input id="webAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
+        <input id="webSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
+        <!-- Moved Bucket above vendor/region -->
+        <input id="webBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
+        <label class="block text-sm font-semibold">Vendor:</label>
+        <select id="webVendor" class="w-full p-2 rounded bg-gray-700 text-white" onchange="updateStorageRegion('web')">
+          <option value="1" selected>Amazon S3</option>
+          <option value="2">Alibaba Cloud</option>
+          <option value="3">Tencent Cloud</option>
+          <option value="5">Microsoft Azure</option>
+          <option value="6">Google Cloud</option>
+          <option value="7">Huawei Cloud</option>
+          <option value="8">Baidu Smart Cloud</option>
+        </select>
+        <label class="block text-sm font-semibold">Region:</label>
+        <select id="webRegion" class="w-full p-2 rounded bg-gray-700 text-white"></select>
+        <input id="webFileNamePrefix" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="File Name Prefix (comma-separated)"/>
+        <hr class="border-gray-600 my-2" />
+        <p class="text-sm font-semibold">Update (Web):</p>
+        <p class="text-sm">Only toggles onHold (true/false).</p>
+        <div class="flex items-center">
+          <input type="checkbox" id="webOnHoldCheckbox" class="mr-2 h-4 w-4" />
+          <label for="webOnHoldCheckbox" class="text-sm">onHold?</label>
+        </div>
+      `;
+    }
 
     // Returns the mode part for the URL
     function getUrlMode() {
@@ -514,6 +544,40 @@
         regionSelect.disabled = false;
         regionSelect.innerHTML = regions.map(opt => `<option value="${opt.value}">${opt.text}</option>`).join("");
       }
+    }
+
+    /* ---------------- CLOUD ANIMATION ---------------- */
+    function animateCloud() {
+      // Create a div and set its innerHTML to an inline SVG representing a cartoon cloud.
+      const cloud = document.createElement('div');
+      cloud.classList.add('cloud-animation');
+      cloud.innerHTML = `
+    <svg width="400" height="300" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- Define a soft blue gradient for the cloud fill -->
+        <linearGradient id="cloudGradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#B3E5FC"/>
+          <stop offset="100%" stop-color="#81D4FA"/>
+        </linearGradient>
+      </defs>
+      <g>
+        <!-- Overlapping ellipses form a gentle cloud shape -->
+        <ellipse cx="150" cy="150" rx="50" ry="35" fill="url(#cloudGradient)" />
+        <ellipse cx="210" cy="130" rx="45" ry="30" fill="url(#cloudGradient)" />
+        <ellipse cx="270" cy="150" rx="50" ry="35" fill="url(#cloudGradient)" />
+        <ellipse cx="210" cy="170" rx="60" ry="40" fill="url(#cloudGradient)" />
+        
+        <!-- Text inside the cloud -->
+        <text x="210" y="155" text-anchor="middle" fill="#fff" font-size="30" font-family="Arial" dy=".3em">
+          Agora
+        </text>
+      </g>
+    </svg>
+  `;
+      document.body.appendChild(cloud);
+      cloud.addEventListener('animationend', () => {
+        cloud.remove();
+      });
     }
 
     /* ---------------- VALIDATION & ACQUIRE ---------------- */
@@ -564,7 +628,7 @@
     function buildStartBodyComposite() {
       const cname = document.getElementById("cname").value.trim();
       const uid = document.getElementById("uid").value.trim();
-      // Use common token input now:
+      // Use common token input:
       const token = document.getElementById("token").value.trim();
       const maxIdleTime = intVal("compositeMaxIdleTime", 30);
       const streamTypes = intVal("compositeStreamTypes", 2);
@@ -730,6 +794,8 @@
         responseEl.textContent = "Error: Channel name and UID are required.";
         return;
       }
+      // Animate a cartoon cloud flying across the screen
+      animateCloud();
       const body = buildStartRequestBody();
       if (!body) return; // Validation error already shown
       const urlMode = getUrlMode();
@@ -842,6 +908,8 @@
 
     /* ---------------- QUERY with AUTO-REFRESH ---------------- */
     async function queryRecording() {
+      // Animate the cloud when auto querying
+      animateCloud();
       const queryResultEl = document.getElementById("queryResult");
       const appid = document.getElementById("appid").value.trim();
       const resourceId = document.getElementById("resourceId").value.trim() || globalResourceId;
@@ -906,6 +974,40 @@
         alert("Update request body copied to clipboard!");
       }).catch(err => {
         alert("Failed to copy: " + err);
+      });
+    }
+
+    /* ---------------- CLOUD ANIMATION FUNCTION ---------------- */
+    function animateCloud() {
+      const cloud = document.createElement('div');
+      cloud.classList.add('cloud-animation');
+      // Inline SVG for a cartoon cloud
+      cloud.innerHTML = `
+    <svg width="400" height="300" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- Define a soft blue gradient for the cloud fill -->
+        <linearGradient id="cloudGradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#B3E5FC"/>
+          <stop offset="100%" stop-color="#81D4FA"/>
+        </linearGradient>
+      </defs>
+      <g>
+        <!-- Overlapping ellipses form a gentle cloud shape -->
+        <ellipse cx="150" cy="150" rx="50" ry="35" fill="url(#cloudGradient)" />
+        <ellipse cx="210" cy="130" rx="45" ry="30" fill="url(#cloudGradient)" />
+        <ellipse cx="270" cy="150" rx="50" ry="35" fill="url(#cloudGradient)" />
+        <ellipse cx="210" cy="170" rx="60" ry="40" fill="url(#cloudGradient)" />
+        
+        <!-- Text inside the cloud -->
+        <text x="210" y="155" text-anchor="middle" fill="#fff" font-size="30" font-family="Arial" dy=".3em">
+          Agora
+        </text>
+      </g>
+    </svg>
+  `;
+      document.body.appendChild(cloud);
+      cloud.addEventListener('animationend', () => {
+        cloud.remove();
       });
     }
   </script>
