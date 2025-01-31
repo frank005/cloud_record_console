@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Agora Cloud Recording</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -93,11 +93,27 @@
   let queryIntervalId = null;
   let isAutoQueryActive = false;
 
+  /* ---------------- INIT & CREDENTIALS ---------------- */
+  window.onload = () => {
+    // Load stored credentials (if any) from localStorage
+    loadCredentialsFromStorage();
+    // Setup initial mode and fields
+    updateFields();
+    // Attach event handlers
+    document.getElementById("modeSelect").addEventListener("change", onModeChange);
+    document.getElementById("acquireBtn").addEventListener("click", onAcquireClick);
+    document.getElementById("startBtn").addEventListener("click", onStartClick);
+    document.getElementById("updateBtn").addEventListener("click", onUpdateClick);
+    document.getElementById("stopBtn").addEventListener("click", onStopClick);
+    document.getElementById("queryBtn").addEventListener("click", onQueryClick);
+    // Listen for any changes in the left panel to stop auto-query
+    attachStopAutoQueryListeners();
+  };
+
   function toggleAuthPopup() {
     document.getElementById("authPopup").classList.toggle("hidden");
   }
 
-  // When "Close" is clicked on the Auth popup, store credentials in localStorage
   function onCloseAuth() {
     const cid = document.getElementById("customerId").value.trim();
     const csecret = document.getElementById("customerSecret").value.trim();
@@ -119,31 +135,21 @@
     document.getElementById("appid").value = aid;
   }
 
-  // Basic Auth
   function getAuthHeaders() {
     const customerId = document.getElementById("customerId").value.trim();
     const customerSecret = document.getElementById("customerSecret").value.trim();
     return "Basic " + btoa(customerId + ":" + customerSecret);
   }
 
-  // Because we want to stop auto-query if the user changes anything in the left panel,
-  // we'll add event listeners that call stopAutoQuery() on input or click, except for the query panel.
-  function attachStopAutoQueryListeners() {
-    const leftPanel = document.getElementById("leftPanel");
-    leftPanel.addEventListener("input", stopAutoQuery);
-    leftPanel.addEventListener("click", stopAutoQuery);
-  }
-
+  /* ---------------- MODE & UI ---------------- */
   function onModeChange() {
     stopAutoQuery();
-    const modeSelect = document.getElementById("modeSelect");
-    globalMode = modeSelect.value;
+    globalMode = document.getElementById("modeSelect").value;
     updateFields();
   }
 
   function updateFields() {
     const fieldsContainer = document.getElementById("dynamicFields");
-
     if (globalMode === "composite") {
       fieldsContainer.innerHTML = getCompositeFieldsHTML();
     } else if (globalMode === "individual") {
@@ -156,17 +162,24 @@
   function getCompositeFieldsHTML() {
     return `
       <!-- Composite-specific Inputs -->
-      <p class="text-sm font-semibold">Start/Update Configs (Composite):</p>
+      <p class="text-sm font-semibold">Start Configs (Composite):</p>
       <input id="compositeToken" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Token (optional)"/>
       <input id="compositeMaxIdleTime" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Max Idle Time (default=30)"/>
       <input id="compositeStreamTypes" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Stream Types (1=Audio,2=Audio+Video) (default=2)"/>
-      <input id="compositeSubscribeVideoUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Subscribe Video UIDs (comma-separated)"/>
-      <input id="compositeUnsubscribeVideoUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Unsubscribe Video UIDs (comma-separated)"/>
-      <input id="compositeSubscribeAudioUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Subscribe Audio UIDs (comma-separated)"/>
-      <input id="compositeUnsubscribeAudioUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Unsubscribe Audio UIDs (comma-separated)"/>
+
+      <!-- Audio UIDs (subscribe/unsubscribe) -->
+      <p class="text-sm font-semibold mt-2">Audio UIDs (comma-separated):</p>
+      <input id="compositeSubscribeAudioUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Subscribe Audio UIDs"/>
+      <input id="compositeUnsubscribeAudioUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Unsubscribe Audio UIDs"/>
+
+      <!-- Video UIDs (subscribe/unsubscribe) -->
+      <p class="text-sm font-semibold mt-2">Video UIDs (comma-separated):</p>
+      <input id="compositeSubscribeVideoUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Subscribe Video UIDs"/>
+      <input id="compositeUnsubscribeVideoUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Unsubscribe Video UIDs"/>
+
       <input id="compositeSubscribeUidGroup" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Subscribe UID Group (0 or 1)"/>
 
-      <p class="text-sm font-semibold">Transcoding Config (for Start/Update if relevant):</p>
+      <p class="text-sm font-semibold">Transcoding (for Start):</p>
       <input id="compositeAudioProfile" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Audio Profile (default=1)"/>
       <input id="compositeChannelType" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Channel Type (0=communication,1=broadcast) (default=0)"/>
       <input id="compositeVideoStreamType" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Stream Type (0=high,1=low) (default=0)"/>
@@ -177,46 +190,61 @@
       <input id="compositeTranscodingLayout" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Mixed Video Layout (default=1)"/>
       <input id="compositeTranscodingBgColor" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Background Color (#FFFFFF)"/>
 
-      <p class="text-sm font-semibold">Storage Config (for Start only):</p>
+      <p class="text-sm font-semibold">Storage (for Start only):</p>
       <input id="compositeAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
       <input id="compositeSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
       <input id="compositeRegion" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Region (default=2)"/>
       <input id="compositeVendor" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Vendor (1=AWS) (default=1)"/>
       <input id="compositeBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
       <input id="compositeFileNamePrefix" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="File Name Prefix (comma-separated)"/>
+
+      <hr class="border-gray-600 my-2" />
+      <p class="text-sm font-semibold">Update (Composite):</p>
+      <p class="text-sm">Update will only modify subscribe/unsubscribe UIDs for Audio/Video.</p>
     `;
   }
 
   function getIndividualFieldsHTML() {
     return `
       <!-- Individual-specific Inputs -->
-      <p class="text-sm font-semibold">Start/Update Configs (Individual):</p>
+      <p class="text-sm font-semibold">Start Configs (Individual):</p>
       <input id="individualToken" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Token (optional)"/>
       <input id="individualMaxIdleTime" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Max Idle Time (default=30)"/>
       <input id="individualStreamTypes" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Stream Types (default=2)"/>
-      <input id="individualSubscribeVideoUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Subscribe Video UIDs (comma-separated)"/>
-      <input id="individualUnsubscribeVideoUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Unsubscribe Video UIDs (comma-separated)"/>
-      <input id="individualSubscribeAudioUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Subscribe Audio UIDs (comma-separated)"/>
-      <input id="individualUnsubscribeAudioUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Unsubscribe Audio UIDs (comma-separated)"/>
+
+      <!-- Audio UIDs (subscribe/unsubscribe) -->
+      <p class="text-sm font-semibold mt-2">Audio UIDs (comma-separated):</p>
+      <input id="individualSubscribeAudioUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Subscribe Audio UIDs"/>
+      <input id="individualUnsubscribeAudioUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Unsubscribe Audio UIDs"/>
+
+      <!-- Video UIDs (subscribe/unsubscribe) -->
+      <p class="text-sm font-semibold mt-2">Video UIDs (comma-separated):</p>
+      <input id="individualSubscribeVideoUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Subscribe Video UIDs"/>
+      <input id="individualUnsubscribeVideoUids" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Unsubscribe Video UIDs"/>
+
       <input id="individualSubscribeUidGroup" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Subscribe UID Group (0 or 1)"/>
 
       <input id="individualChannelType" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Channel Type (0=communication) (default=0)"/>
       <input id="individualVideoStreamType" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Stream Type (0=high) (default=0)"/>
 
-      <p class="text-sm font-semibold">Storage Config (for Start only):</p>
+      <p class="text-sm font-semibold">Storage (for Start only):</p>
       <input id="individualAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
       <input id="individualSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
       <input id="individualRegion" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Region (default=2)"/>
       <input id="individualVendor" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Vendor (1=AWS) (default=1)"/>
       <input id="individualBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
       <input id="individualFileNamePrefix" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="File Name Prefix (comma-separated)"/>
+
+      <hr class="border-gray-600 my-2" />
+      <p class="text-sm font-semibold">Update (Individual):</p>
+      <p class="text-sm">Update will only modify subscribe/unsubscribe UIDs for Audio/Video.</p>
     `;
   }
 
   function getWebFieldsHTML() {
     return `
       <!-- Web-specific Inputs -->
-      <p class="text-sm font-semibold">Start/Update Configs (Web):</p>
+      <p class="text-sm font-semibold">Start Configs (Web):</p>
       <input id="webToken" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Token (optional)"/>
       <input id="webUrl" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Web URL"/>
       <input id="webMaxRecordingHour" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Max Recording Hour (default=3)"/>
@@ -226,13 +254,21 @@
       <input id="webVideoWidth" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Width (1280)"/>
       <input id="webVideoHeight" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Video Height (720)"/>
 
-      <p class="text-sm font-semibold">Storage Config (for Start only):</p>
+      <p class="text-sm font-semibold">Storage (for Start only):</p>
       <input id="webAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
       <input id="webSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
       <input id="webRegion" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Region (default=2)"/>
       <input id="webVendor" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Vendor (1=AWS) (default=1)"/>
       <input id="webBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
       <input id="webFileNamePrefix" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="File Name Prefix (comma-separated)"/>
+
+      <hr class="border-gray-600 my-2" />
+      <p class="text-sm font-semibold">Update (Web):</p>
+      <p class="text-sm">Only toggles onHold (true/false).</p>
+      <div class="flex items-center">
+        <input type="checkbox" id="webOnHoldCheckbox" class="mr-2 h-4 w-4" />
+        <label for="webOnHoldCheckbox" class="text-sm">onHold?</label>
+      </div>
     `;
   }
 
@@ -240,23 +276,30 @@
     return globalMode === "composite" ? "mix" : globalMode;
   }
 
-  // parse int, fallback to default
+  // Parse integer with default
   function intVal(id, def) {
-    const str = document.getElementById(id)?.value.trim();
-    if (!str) return def;
-    const parsed = parseInt(str, 10);
-    return isNaN(parsed) ? def : parsed;
+    const str = document.getElementById(id)?.value.trim() || "";
+    const val = parseInt(str, 10);
+    return isNaN(val) ? def : val;
   }
-  // parse string array from comma-sep
+
+  // Convert comma-separated string to array
   function arrayVal(id) {
     const str = document.getElementById(id)?.value.trim() || "";
     if (!str) return [];
     return str.split(",").map(s => s.trim()).filter(Boolean);
   }
 
+  /* ---------------- STOP AUTO QUERY ON LEFT PANEL ACTIVITY ---------------- */
+  function attachStopAutoQueryListeners() {
+    const leftPanel = document.getElementById("leftPanel");
+    leftPanel.addEventListener("input", stopAutoQuery);
+    leftPanel.addEventListener("click", stopAutoQuery);
+  }
+
   /* ---------------- ACQUIRE ---------------- */
   async function acquireRecording() {
-    // If we're re-acquiring, reset the query
+    // If we're re-acquiring, reset the query panel, sid, etc.
     document.getElementById("queryResult").textContent = "";
     globalSid = "";
     document.getElementById("sid").value = "";
@@ -274,7 +317,7 @@
       clientRequest: {}
     };
 
-    // If mode is web, add extra fields
+    // If mode is web, add extra fields for acquire
     if (globalMode === "web") {
       body.clientRequest.resourceExpiredHour = 24;
       body.clientRequest.scene = 1;
@@ -301,12 +344,12 @@
     }
   }
 
-  /* ---------------- START ---------------- */
-  // For start calls, we optionally add "recordingFileConfig" if mp4 checkbox is checked
+  /* ---------------- SHOULD INCLUDE MP4? ---------------- */
   function shouldIncludeMp4() {
     return document.getElementById("mp4Checkbox").checked;
   }
 
+  /* ---------------- START ---------------- */
   function buildStartBodyComposite() {
     // Basic
     const cname = document.getElementById("cname").value.trim();
@@ -336,8 +379,8 @@
     // Storage
     const accessKey = document.getElementById("compositeAccessKey").value.trim();
     const secretKey = document.getElementById("compositeSecretKey").value.trim();
-    const region = intVal("compositeRegion", 2); // default=2
-    const vendor = intVal("compositeVendor", 1); // default=1 => AWS
+    const region = intVal("compositeRegion", 2);
+    const vendor = intVal("compositeVendor", 1);
     const bucket = document.getElementById("compositeBucket").value.trim();
     const fileNamePrefix = arrayVal("compositeFileNamePrefix");
 
@@ -377,7 +420,7 @@
       }
     };
 
-    // Conditionally add recordingFileConfig
+    // Conditionally add recordingFileConfig if MP4 is checked
     if (shouldIncludeMp4()) {
       request.clientRequest.recordingFileConfig = {
         avFileType: ["hls", "mp4"]
@@ -499,7 +542,6 @@
         avFileType: ["hls", "mp4"]
       };
     }
-
     return request;
   }
 
@@ -543,77 +585,95 @@
     }
   }
 
-  /* ---------------- UPDATE ---------------- */
+  /* ---------------- UPDATE (POST) ---------------- */
+  // For Composite/Individual:
+  // {
+  //   "cname": "string",
+  //   "uid": "string",
+  //   "clientRequest": {
+  //     "streamSubscribe": {
+  //       "audioUidList": {
+  //         "subscribeAudioUids": [...],
+  //         "unsubscribeAudioUids": [...]
+  //       },
+  //       "videoUidList": {
+  //         "subscribeVideoUids": [...],
+  //         "unsubscribeVideoUids": [...]
+  //       }
+  //     }
+  //   }
+  // }
+  //
+  // For Web:
+  // {
+  //   "cname": "string",
+  //   "uid": "string",
+  //   "clientRequest": {
+  //     "webRecordingConfig": {
+  //       "onhold": false
+  //     }
+  //   }
+  // }
+
+  function buildUpdateBodyCompositeOrIndividual(cname, uid, subVid, unsubVid, subAud, unsubAud) {
+    return {
+      cname,
+      uid,
+      clientRequest: {
+        streamSubscribe: {
+          audioUidList: {
+            subscribeAudioUids: subAud,
+            unsubscribeAudioUids: unsubAud
+          },
+          videoUidList: {
+            subscribeVideoUids: subVid,
+            unsubscribeVideoUids: unsubVid
+          }
+        }
+      }
+    };
+  }
+
   function buildUpdateBody() {
-    // Reuse some fields from the relevant mode
     const cname = document.getElementById("cname").value.trim();
     const uid = document.getElementById("uid").value.trim();
 
     if (globalMode === "composite") {
-      // Example partial updates
-      const maxIdleTime = intVal("compositeMaxIdleTime", 30);
       const subscribeVideoUids = arrayVal("compositeSubscribeVideoUids");
       const unsubscribeVideoUids = arrayVal("compositeUnsubscribeVideoUids");
       const subscribeAudioUids = arrayVal("compositeSubscribeAudioUids");
       const unsubscribeAudioUids = arrayVal("compositeUnsubscribeAudioUids");
-      const subscribeUidGroup = intVal("compositeSubscribeUidGroup", 0);
-
-      return {
+      return buildUpdateBodyCompositeOrIndividual(
         cname,
         uid,
-        clientRequest: {
-          maxIdleTime,
-          subscribeVideoUids,
-          unsubscribeVideoUids,
-          subscribeAudioUids,
-          unsubscribeAudioUids,
-          subscribeUidGroup
-        }
-      };
+        subscribeVideoUids,
+        unsubscribeVideoUids,
+        subscribeAudioUids,
+        unsubscribeAudioUids
+      );
     }
     else if (globalMode === "individual") {
-      const maxIdleTime = intVal("individualMaxIdleTime", 30);
       const subscribeVideoUids = arrayVal("individualSubscribeVideoUids");
       const unsubscribeVideoUids = arrayVal("individualUnsubscribeVideoUids");
       const subscribeAudioUids = arrayVal("individualSubscribeAudioUids");
       const unsubscribeAudioUids = arrayVal("individualUnsubscribeAudioUids");
-      const subscribeUidGroup = intVal("individualSubscribeUidGroup", 0);
-
-      return {
+      return buildUpdateBodyCompositeOrIndividual(
         cname,
         uid,
-        clientRequest: {
-          maxIdleTime,
-          subscribeVideoUids,
-          unsubscribeVideoUids,
-          subscribeAudioUids,
-          unsubscribeAudioUids,
-          subscribeUidGroup
-        }
-      };
+        subscribeVideoUids,
+        unsubscribeVideoUids,
+        subscribeAudioUids,
+        unsubscribeAudioUids
+      );
     }
     else if (globalMode === "web") {
-      const webUrl = document.getElementById("webUrl").value.trim();
-      const audioProfile = intVal("webAudioProfile", 0);
-      const videoWidth = intVal("webVideoWidth", 1280);
-      const videoHeight = intVal("webVideoHeight", 720);
-
+      const webOnHold = document.getElementById("webOnHoldCheckbox").checked;
       return {
         cname,
         uid,
         clientRequest: {
-          extensionServiceConfig: {
-            extensionServices: [
-              {
-                serviceName: "web_recorder_service",
-                serviceParam: {
-                  url: webUrl,
-                  audioProfile,
-                  videoWidth,
-                  videoHeight
-                }
-              }
-            ]
+          webRecordingConfig: {
+            onhold: webOnHold
           }
         }
       };
@@ -633,6 +693,7 @@
 
     const body = buildUpdateBody();
     const urlMode = getUrlMode();
+    // POST for update
     const url = `https://api.agora.io/v1/apps/${appid}/cloud_recording/resourceid/${globalResourceId}/sid/${globalSid}/mode/${urlMode}/update`;
 
     try {
@@ -741,7 +802,7 @@
     }
   }
 
-  // Button handlers
+  /* ---------------- BUTTON HANDLERS ---------------- */
   function onAcquireClick() {
     stopAutoQuery();
     acquireRecording();
@@ -761,23 +822,6 @@
   function onQueryClick() {
     startAutoQuery();
   }
-
-  /* ---------------- INIT ---------------- */
-  window.onload = () => {
-    // Load stored credentials (if any) from localStorage
-    loadCredentialsFromStorage();
-    // Setup initial mode and fields
-    updateFields();
-    // Attach event handlers
-    document.getElementById("modeSelect").addEventListener("change", onModeChange);
-    document.getElementById("acquireBtn").addEventListener("click", onAcquireClick);
-    document.getElementById("startBtn").addEventListener("click", onStartClick);
-    document.getElementById("updateBtn").addEventListener("click", onUpdateClick);
-    document.getElementById("stopBtn").addEventListener("click", onStopClick);
-    document.getElementById("queryBtn").addEventListener("click", onQueryClick);
-    // Listen for any changes in the left panel to stop auto-query
-    attachStopAutoQueryListeners();
-  };
 </script>
 </body>
 </html>
