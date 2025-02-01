@@ -133,6 +133,19 @@
       </div>
     </div>
 
+    <!-- Live Video Section with Editable Public URL -->
+    <div id="liveVideoSection" class="mt-6">
+        <!-- Editable URL field added above video player and checkbox -->
+        <input type="text" id="publicUrlInput" class="w-full p-2 mb-2 rounded bg-gray-700 text-white" placeholder="Public URL will appear here" />
+        <label class="inline-flex items-center">
+            <input type="checkbox" id="playLiveVideoCheckbox" class="form-checkbox h-5 w-5 text-blue-600" />
+            <span class="ml-2">Play Live Video</span>
+        </label>
+        <div id="videoPlayerContainer" class="mt-4 hidden">
+            <video id="videoPlayer" controls class="w-full" autoplay></video>
+        </div>
+        </div>
+
     <!-- Auth Popup -->
     <div id="authPopup" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center">
       <div class="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-sm">
@@ -154,6 +167,8 @@
 
     let queryIntervalId = null;
     let isAutoQueryActive = false;
+
+    let globalFileName = "";
 
     /* ---------------- STORAGE OPTIONS ---------------- */
     // Keys are vendor values (as strings) and the arrays hold region objects.
@@ -281,6 +296,23 @@
       document.getElementById("stopBtn").addEventListener("click", onStopClick);
       document.getElementById("queryBtn").addEventListener("click", onQueryClick);
       attachStopAutoQueryListeners();
+      document.getElementById("playLiveVideoCheckbox").addEventListener("change", function() {
+        const container = document.getElementById("videoPlayerContainer");
+        if (this.checked) {
+          const videoPlayer = document.getElementById("videoPlayer");
+          const publicURL = generatePublicURL();
+          if (publicURL) {
+            videoPlayer.src = publicURL;
+            container.classList.remove("hidden");
+            document.getElementById("publicUrlInput").value = publicURL;
+          } else {
+            container.classList.remove("hidden");
+          }
+        } else {
+          container.classList.add("hidden");
+          document.getElementById("videoPlayer").src = "";
+        }
+      });
     };
 
     function toggleAuthPopup() {
@@ -511,6 +543,21 @@
       return globalMode === "composite" ? "mix" : globalMode;
     }
 
+    // Returns the mode part for the URL
+    function normalizeRegion(regionStr) {
+      return regionStr.toLowerCase().replace(/_/g, '-');
+    }
+    function getRegionText(vendor, regionValue) {
+      const regions = storageOptions[vendor.toString()];
+      if (!regions) return "";
+      for (let opt of regions) {
+        if (parseInt(opt.value, 10) === regionValue) {
+          return opt.text;
+        }
+      }
+      return "";
+    }
+
     // Parse integer with default value
     function intVal(id, def) {
       const str = document.getElementById(id)?.value.trim() || "";
@@ -544,6 +591,62 @@
         regionSelect.disabled = false;
         regionSelect.innerHTML = regions.map(opt => `<option value="${opt.value}">${opt.text}</option>`).join("");
       }
+    }
+
+    /* ---------------- GET STORAGE CONFIG FOR CURRENT MODE ---------------- */
+    function getStorageConfigForCurrentMode() {
+      let bucket, vendor, region, fileNamePrefix;
+      if (globalMode === "composite") {
+        bucket = document.getElementById("compositeBucket").value.trim();
+        vendor = parseInt(document.getElementById("compositeVendor").value, 10);
+        region = parseInt(document.getElementById("compositeRegion").value, 10);
+        fileNamePrefix = document.getElementById("compositeFileNamePrefix").value.trim();
+      } else if (globalMode === "individual") {
+        bucket = document.getElementById("individualBucket").value.trim();
+        vendor = parseInt(document.getElementById("individualVendor").value, 10);
+        region = parseInt(document.getElementById("individualRegion").value, 10);
+        fileNamePrefix = document.getElementById("individualFileNamePrefix").value.trim();
+      } else if (globalMode === "web") {
+        bucket = document.getElementById("webBucket").value.trim();
+        vendor = parseInt(document.getElementById("webVendor").value, 10);
+        region = parseInt(document.getElementById("webRegion").value, 10);
+        fileNamePrefix = document.getElementById("webFileNamePrefix").value.trim();
+      }
+      return { bucket, vendor, region, fileNamePrefix };
+    }
+    /* ---------------- GENERATE PUBLIC URL ---------------- */
+    function generatePublicURL() {
+      const { bucket, vendor, region, fileNamePrefix } = getStorageConfigForCurrentMode();
+      if (!globalFileName) return "";
+      let url = "";
+      const prefixPart = fileNamePrefix ? (fileNamePrefix.endsWith("/") ? fileNamePrefix : fileNamePrefix + "/") : "";
+      const regionText = getRegionText(vendor, region);
+      switch(vendor) {
+        case 1:
+          url = `https://${bucket}.s3.${normalizeRegion(regionText)}.amazonaws.com/${prefixPart}${globalFileName}`;
+          break;
+        case 2:
+          url = `https://${bucket}.oss-${normalizeRegion(regionText)}.aliyuncs.com/${prefixPart}${globalFileName}`;
+          break;
+        case 3:
+          url = `https://${bucket}.cos.${normalizeRegion(regionText)}.myqcloud.com/${prefixPart}${globalFileName}`;
+          break;
+        case 5:
+          url = `https://${bucket}.blob.core.windows.net/${prefixPart}${globalFileName}`;
+          break;
+        case 6:
+          url = `https://storage.googleapis.com/${bucket}/${prefixPart}${globalFileName}`;
+          break;
+        case 7:
+          url = `https://${bucket}.obs.${normalizeRegion(regionText)}.myhuaweicloud.com/${prefixPart}${globalFileName}`;
+          break;
+        case 8:
+          url = `https://${bucket}.bcebos.com/${prefixPart}${globalFileName}`;
+          break;
+        default:
+          url = "";
+      }
+      return url;
     }
 
     /* ---------------- CLOUD ANIMATION ---------------- */
@@ -922,6 +1025,7 @@
       if (document.hidden) return;
       queryResultEl.textContent = "Querying recording...";
       const urlMode = getUrlMode();
+      
       const url = `https://api.agora.io/v1/apps/${appid}/cloud_recording/resourceid/${resourceId}/sid/${sid}/mode/${urlMode}/query`;
       try {
         const resp = await fetch(url, {
@@ -930,6 +1034,19 @@
         });
         const data = await resp.json();
         queryResultEl.textContent = JSON.stringify(data, null, 2);
+        globalFileName = data.serverResponse.fileList[0].fileName || "";
+        console.log(document.getElementById("playLiveVideoCheckbox").checked);
+        if (document.getElementById("playLiveVideoCheckbox").checked) {
+          const videoPlayer = document.getElementById("videoPlayer");
+          const publicURL = generatePublicURL();
+          if (publicURL) {
+            videoPlayer.src = publicURL;
+            console.log("Public URL:", publicURL);
+            // Update the editable URL field with the generated URL
+            document.getElementById("publicUrlInput").value = publicURL;
+            document.getElementById("videoPlayerContainer").classList.remove("hidden");
+          }
+        }
       } catch (error) {
         queryResultEl.textContent = error.toString();
       }
