@@ -139,23 +139,22 @@
     <div id="liveVideoSection" class="mt-6">
         <!-- Now the Copy M3U8 link button is placed here, near the URL input -->
         <div class="flex items-center space-x-2 mb-2">
-          <button
-            id="copyM3u8LinkBtn"
-            class="hidden bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded"
-          >
-            Copy M3U8 link
-          </button>
-          <!-- placeholder text updated -->
-          <input
-            type="text"
-            id="publicUrlInput"
-            class="w-full p-2 rounded bg-gray-700 text-white"
-            placeholder="Public URL will appear here after querying"
-          />
-        </div>
+            <input
+              type="text"
+              id="publicUrlInput"
+              class="w-full p-2 rounded bg-gray-700 text-white"
+              placeholder="Public URL will appear here after querying"
+            />
+            <button
+              id="copyM3u8LinkBtn"
+              class="hidden bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 text-sm rounded"
+            >
+              Copy
+            </button>
+          </div>
 
         <label class="inline-flex items-center">
-            <input type="checkbox" id="playLiveVideoCheckbox" class="form-checkbox h-5 w-5 text-blue-600" checked />
+            <input type="checkbox" id="playLiveVideoCheckbox" class="form-checkbox h-5 w-5 text-blue-600" />
             <span class="ml-2">Play Live Video</span>
         </label>
         <div id="videoPlayerContainer" class="mt-4 hidden">
@@ -1202,6 +1201,18 @@
       return url;
     }
 
+    let lastM3u8Url = "";
+    let m3u8NeedsRecheck = false;
+
+    async function checkM3U8Exists(url) {
+        try {
+            const response = await fetch(url, { method: "HEAD" });
+            return response.status === 200;
+        } catch {
+            return false;
+        }
+        }
+
     /* ---------------- QUERY with AUTO-REFRESH ---------------- */
     async function queryRecording() {
       animateCloud();
@@ -1226,15 +1237,19 @@
         const data = await resp.json();
         queryResultEl.textContent = JSON.stringify(data, null, 2);
 
+        let newFileName = data.serverResponse?.fileList?.[0]?.fileName || "";
+        
         // Only update if there's a new filename
         const serverName = data.serverResponse?.fileList?.[0]?.fileName || "";
         if (serverName && serverName !== lastQueriedFileName) {
           lastQueriedFileName = serverName;
           // If composite mode and ends with .m3u8, rename
           let playableName = serverName;
+          let exists = false;
           if (globalMode === "composite" && serverName.endsWith(".m3u8")) {
             const { fileNamePrefix } = getStorageConfigForCurrentMode();
             playableName = renameM3u8ForComposite(serverName, !!fileNamePrefix);
+            exists = await checkM3U8Exists(m3u8Url);
           }
 
           globalFileName = playableName;
