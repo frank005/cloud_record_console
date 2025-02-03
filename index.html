@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Agora Cloud Recording</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- hls.js to handle .m3u8 playback in non-Safari browsers -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     body {
       overflow-y: auto;
@@ -133,18 +135,33 @@
       </div>
     </div>
 
-    <!-- Live Video Section with Editable Public URL -->
+    <!-- Live Video Section with Editable Public URL and Copy M3U8 link button -->
     <div id="liveVideoSection" class="mt-6">
-        <!-- Editable URL field added above video player and checkbox -->
-        <input type="text" id="publicUrlInput" class="w-full p-2 mb-2 rounded bg-gray-700 text-white" placeholder="Public URL will appear here" />
+        <!-- Now the Copy M3U8 link button is placed here, near the URL input -->
+        <div class="flex items-center space-x-2 mb-2">
+          <button
+            id="copyM3u8LinkBtn"
+            class="hidden bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded"
+          >
+            Copy M3U8 link
+          </button>
+          <!-- placeholder text updated -->
+          <input
+            type="text"
+            id="publicUrlInput"
+            class="w-full p-2 rounded bg-gray-700 text-white"
+            placeholder="Public URL will appear here after querying"
+          />
+        </div>
+
         <label class="inline-flex items-center">
-            <input type="checkbox" id="playLiveVideoCheckbox" class="form-checkbox h-5 w-5 text-blue-600" />
+            <input type="checkbox" id="playLiveVideoCheckbox" class="form-checkbox h-5 w-5 text-blue-600" checked />
             <span class="ml-2">Play Live Video</span>
         </label>
         <div id="videoPlayerContainer" class="mt-4 hidden">
             <video id="videoPlayer" controls class="w-full" autoplay></video>
         </div>
-        </div>
+    </div>
 
     <!-- Auth Popup -->
     <div id="authPopup" class="hidden fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center">
@@ -169,11 +186,9 @@
     let isAutoQueryActive = false;
 
     let globalFileName = "";
+    let lastQueriedFileName = "";
 
     /* ---------------- STORAGE OPTIONS ---------------- */
-    // Keys are vendor values (as strings) and the arrays hold region objects.
-    // For vendors that do not require a region (Microsoft Azure: 5 and Google Cloud: 6),
-    // we use a null value.
     const storageOptions = {
       "1": [ // Amazon S3
         { value: "0", text: "US_EAST_1" },
@@ -253,8 +268,8 @@
         { value: "18", text: "EU_Frankfurt" },
         { value: "19", text: "EU_Moscow" }
       ],
-      "5": null, // Microsoft Azure – no region required
-      "6": null, // Google Cloud – no region required
+      "5": null, // Microsoft Azure
+      "6": null, // Google Cloud
       "7": [ // Huawei Cloud
         { value: "0", text: "CN_North_1" },
         { value: "1", text: "CN_North_4" },
@@ -296,13 +311,15 @@
       document.getElementById("stopBtn").addEventListener("click", onStopClick);
       document.getElementById("queryBtn").addEventListener("click", onQueryClick);
       attachStopAutoQueryListeners();
+
+      // Play Live Video checkbox
       document.getElementById("playLiveVideoCheckbox").addEventListener("change", function() {
         const container = document.getElementById("videoPlayerContainer");
         if (this.checked) {
           const videoPlayer = document.getElementById("videoPlayer");
           const publicURL = generatePublicURL();
           if (publicURL) {
-            videoPlayer.src = publicURL;
+            handleVideoPlayback(publicURL, videoPlayer);
             container.classList.remove("hidden");
             document.getElementById("publicUrlInput").value = publicURL;
           } else {
@@ -312,6 +329,22 @@
           container.classList.add("hidden");
           document.getElementById("videoPlayer").src = "";
         }
+      });
+
+      // Manual URL changes + Enter to play
+      document.getElementById("publicUrlInput").addEventListener("keydown", function(e) {
+        if (e.key === "Enter") {
+          const url = this.value.trim();
+          if (!url) return;
+          const videoPlayer = document.getElementById("videoPlayer");
+          handleVideoPlayback(url, videoPlayer);
+          document.getElementById("videoPlayerContainer").classList.remove("hidden");
+        }
+      });
+
+      // Copy M3U8 link button is hidden until we have an M3U8 to copy
+      document.getElementById("copyM3u8LinkBtn").addEventListener("click", () => {
+        if (currentM3u8Url) copyToClipboard(currentM3u8Url);
       });
     };
 
@@ -369,8 +402,7 @@
       } else {
         container.innerHTML = getWebFieldsHTML();
       }
-      // After injecting dynamic fields, update the vendor's region dropdown.
-      updateStorageRegion(globalMode);
+      updateStorageRegion(globalMode); // Re-populate region dropdown
     }
 
     function getCompositeFieldsHTML() {
@@ -422,7 +454,6 @@
         <p class="text-sm font-semibold">Storage (for Start only):</p>
         <input id="compositeAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
         <input id="compositeSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
-        <!-- Moved Bucket above vendor/region -->
         <input id="compositeBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
         <label class="block text-sm font-semibold">Vendor:</label>
         <select id="compositeVendor" class="w-full p-2 rounded bg-gray-700 text-white" onchange="updateStorageRegion('composite')">
@@ -474,7 +505,6 @@
         <p class="text-sm font-semibold">Storage (for Start only):</p>
         <input id="individualAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
         <input id="individualSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
-        <!-- Moved Bucket above vendor/region -->
         <input id="individualBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
         <label class="block text-sm font-semibold">Vendor:</label>
         <select id="individualVendor" class="w-full p-2 rounded bg-gray-700 text-white" onchange="updateStorageRegion('individual')">
@@ -513,7 +543,6 @@
         <p class="text-sm font-semibold">Storage (for Start only):</p>
         <input id="webAccessKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Access Key"/>
         <input id="webSecretKey" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Secret Key"/>
-        <!-- Moved Bucket above vendor/region -->
         <input id="webBucket" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Storage Bucket"/>
         <label class="block text-sm font-semibold">Vendor:</label>
         <select id="webVendor" class="w-full p-2 rounded bg-gray-700 text-white" onchange="updateStorageRegion('web')">
@@ -538,15 +567,14 @@
       `;
     }
 
-    // Returns the mode part for the URL
     function getUrlMode() {
       return globalMode === "composite" ? "mix" : globalMode;
     }
 
-    // Returns the mode part for the URL
     function normalizeRegion(regionStr) {
       return regionStr.toLowerCase().replace(/_/g, '-');
     }
+
     function getRegionText(vendor, regionValue) {
       const regions = storageOptions[vendor.toString()];
       if (!regions) return "";
@@ -558,14 +586,12 @@
       return "";
     }
 
-    // Parse integer with default value
     function intVal(id, def) {
       const str = document.getElementById(id)?.value.trim() || "";
       const val = parseInt(str, 10);
       return isNaN(val) ? def : val;
     }
 
-    // Convert comma-separated string to array
     function arrayVal(id) {
       const str = document.getElementById(id)?.value.trim() || "";
       return str ? str.split(",").map(s => s.trim()).filter(Boolean) : [];
@@ -577,14 +603,12 @@
       leftPanel.addEventListener("click", stopAutoQuery);
     }
 
-    /* ---------------- UPDATE STORAGE REGION BASED ON VENDOR ---------------- */
     function updateStorageRegion(mode) {
       const vendorSelect = document.getElementById(mode + "Vendor");
       const regionSelect = document.getElementById(mode + "Region");
       const vendorValue = vendorSelect.value;
       const regions = storageOptions[vendorValue];
       if (!regions) {
-        // For vendors that do not require a region (e.g., Microsoft Azure and Google Cloud)
         regionSelect.innerHTML = `<option value="">Not required</option>`;
         regionSelect.disabled = true;
       } else {
@@ -593,7 +617,6 @@
       }
     }
 
-    /* ---------------- GET STORAGE CONFIG FOR CURRENT MODE ---------------- */
     function getStorageConfigForCurrentMode() {
       let bucket, vendor, region, fileNamePrefix;
       if (globalMode === "composite") {
@@ -606,7 +629,8 @@
         vendor = parseInt(document.getElementById("individualVendor").value, 10);
         region = parseInt(document.getElementById("individualRegion").value, 10);
         fileNamePrefix = document.getElementById("individualFileNamePrefix").value.trim();
-      } else if (globalMode === "web") {
+      } else {
+        // web
         bucket = document.getElementById("webBucket").value.trim();
         vendor = parseInt(document.getElementById("webVendor").value, 10);
         region = parseInt(document.getElementById("webRegion").value, 10);
@@ -614,34 +638,60 @@
       }
       return { bucket, vendor, region, fileNamePrefix };
     }
+
+    /* ---------------- Rename logic for composite + .m3u8 ---------------- */
+    function renameM3u8ForComposite(originalName, prefixFilledOut) {
+      // If prefix is NOT filled out, rename to "live_name.m3u8"
+      // If prefix is filled out, find the last slash and insert "live_" after it
+      // Example: "prefix/testfile.m3u8" -> "prefix/live_testfile.m3u8"
+      const baseM3u8 = originalName.replace(/\.m3u8$/, ""); // remove .m3u8
+      if (!prefixFilledOut) {
+        // no prefix: rename entire thing to "live_<basename>.m3u8"
+        // e.g. if original is "some/folder/file.m3u8", we just get the last part "file"
+        let lastPart = baseM3u8.replace(/^.*\//, ""); // remove path
+        return "live_" + lastPart + ".m3u8";
+      } else {
+        // prefix is set: find the last slash and insert "live_" after it
+        const slashIdx = baseM3u8.lastIndexOf("/");
+        if (slashIdx === -1) {
+          // no slash, just do "live_<filename>.m3u8"
+          return "live_" + baseM3u8 + ".m3u8";
+        }
+        // separate folder path from file
+        const folder = baseM3u8.substring(0, slashIdx + 1);
+        const file = baseM3u8.substring(slashIdx + 1);
+        return folder + "live_" + file + ".m3u8";
+      }
+    }
+
     /* ---------------- GENERATE PUBLIC URL ---------------- */
     function generatePublicURL() {
-      const { bucket, vendor, region, fileNamePrefix } = getStorageConfigForCurrentMode();
       if (!globalFileName) return "";
+      const { bucket, vendor, region } = getStorageConfigForCurrentMode();
       let url = "";
-      const prefixPart = fileNamePrefix ? (fileNamePrefix.endsWith("/") ? fileNamePrefix : fileNamePrefix + "/") : "";
       const regionText = getRegionText(vendor, region);
+
       switch(vendor) {
         case 1:
-          url = `https://${bucket}.s3.${normalizeRegion(regionText)}.amazonaws.com/${prefixPart}${globalFileName}`;
+          url = `https://${bucket}.s3.${normalizeRegion(regionText)}.amazonaws.com/${globalFileName}`;
           break;
         case 2:
-          url = `https://${bucket}.oss-${normalizeRegion(regionText)}.aliyuncs.com/${prefixPart}${globalFileName}`;
+          url = `https://${bucket}.oss-${normalizeRegion(regionText)}.aliyuncs.com/${globalFileName}`;
           break;
         case 3:
-          url = `https://${bucket}.cos.${normalizeRegion(regionText)}.myqcloud.com/${prefixPart}${globalFileName}`;
+          url = `https://${bucket}.cos.${normalizeRegion(regionText)}.myqcloud.com/${globalFileName}`;
           break;
         case 5:
-          url = `https://${bucket}.blob.core.windows.net/${prefixPart}${globalFileName}`;
+          url = `https://${bucket}.blob.core.windows.net/${globalFileName}`;
           break;
         case 6:
-          url = `https://storage.googleapis.com/${bucket}/${prefixPart}${globalFileName}`;
+          url = `https://storage.googleapis.com/${bucket}/${globalFileName}`;
           break;
         case 7:
-          url = `https://${bucket}.obs.${normalizeRegion(regionText)}.myhuaweicloud.com/${prefixPart}${globalFileName}`;
+          url = `https://${bucket}.obs.${normalizeRegion(regionText)}.myhuaweicloud.com/${globalFileName}`;
           break;
         case 8:
-          url = `https://${bucket}.bcebos.com/${prefixPart}${globalFileName}`;
+          url = `https://${bucket}.bcebos.com/${globalFileName}`;
           break;
         default:
           url = "";
@@ -651,26 +701,21 @@
 
     /* ---------------- CLOUD ANIMATION ---------------- */
     function animateCloud() {
-      // Create a div and set its innerHTML to an inline SVG representing a cartoon cloud.
       const cloud = document.createElement('div');
       cloud.classList.add('cloud-animation');
       cloud.innerHTML = `
     <svg width="400" height="300" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <!-- Define a soft blue gradient for the cloud fill -->
         <linearGradient id="cloudGradient" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#B3E5FC"/>
           <stop offset="100%" stop-color="#81D4FA"/>
         </linearGradient>
       </defs>
       <g>
-        <!-- Overlapping ellipses form a gentle cloud shape -->
         <ellipse cx="150" cy="150" rx="50" ry="35" fill="url(#cloudGradient)" />
         <ellipse cx="210" cy="130" rx="45" ry="30" fill="url(#cloudGradient)" />
         <ellipse cx="270" cy="150" rx="50" ry="35" fill="url(#cloudGradient)" />
         <ellipse cx="210" cy="170" rx="60" ry="40" fill="url(#cloudGradient)" />
-        
-        <!-- Text inside the cloud -->
         <text x="210" y="155" text-anchor="middle" fill="#fff" font-size="30" font-family="Arial" dy=".3em">
           Agora
         </text>
@@ -682,6 +727,37 @@
         cloud.remove();
       });
     }
+
+    /* ---------------- VIDEO HELPER ---------------- */
+    function handleVideoPlayback(url, videoElem) {
+      if (url.endsWith(".m3u8")) {
+        if (Hls.isSupported()) {
+          const hls = new Hls();
+          hls.loadSource(url);
+          hls.attachMedia(videoElem);
+        } else if (videoElem.canPlayType('application/vnd.apple.mpegurl')) {
+          videoElem.src = url;
+        } else {
+          console.warn("This browser does not support M3U8 or HLS.");
+        }
+      } else {
+        // e.g. MP4
+        videoElem.src = url;
+      }
+      videoElem.currentTime = 0;
+      videoElem.play();
+    }
+
+    /* ---------------- COPY HELPER ---------------- */
+    function copyToClipboard(str) {
+      navigator.clipboard.writeText(str).then(() => {
+        alert("Copied to clipboard!");
+      }).catch(err => {
+        alert("Failed to copy: " + err);
+      });
+    }
+
+    let currentM3u8Url = ""; // We'll store the M3U8 link if needed
 
     /* ---------------- VALIDATION & ACQUIRE ---------------- */
     async function acquireRecording() {
@@ -731,7 +807,6 @@
     function buildStartBodyComposite() {
       const cname = document.getElementById("cname").value.trim();
       const uid = document.getElementById("uid").value.trim();
-      // Use common token input:
       const token = document.getElementById("token").value.trim();
       const maxIdleTime = intVal("compositeMaxIdleTime", 30);
       const streamTypes = intVal("compositeStreamTypes", 2);
@@ -754,10 +829,12 @@
       const region = intVal("compositeRegion", 0);
       const bucket = document.getElementById("compositeBucket").value.trim();
       const fileNamePrefix = arrayVal("compositeFileNamePrefix");
+
       if (!accessKey || !secretKey || !bucket) {
         document.getElementById("response").textContent = "Error: Storage Access Key, Secret Key, and Bucket are required.";
         return null;
       }
+
       const request = {
         cname,
         uid,
@@ -769,16 +846,34 @@
             audioProfile,
             channelType,
             videoStreamType,
-            transcodingConfig: { width, height, bitrate, fps, mixedVideoLayout },
+            transcodingConfig: {
+              width,
+              height,
+              bitrate,
+              fps,
+              mixedVideoLayout
+            },
             subscribeVideoUids,
             unsubscribeVideoUids,
             subscribeAudioUids,
             unsubscribeAudioUids,
-            subscribeUidGroup
+            subscribeUidGroup,
+            // composite extensionParam
+            extensionParams: {
+              enableLivePlaylist: true
+            }
           },
-          storageConfig: { accessKey, secretKey, region, vendor, bucket, fileNamePrefix }
+          storageConfig: {
+            accessKey,
+            secretKey,
+            region,
+            vendor,
+            bucket,
+            fileNamePrefix
+          }
         }
       };
+
       if (shouldIncludeMp4()) {
         request.clientRequest.recordingFileConfig = { avFileType: ["hls", "mp4"] };
       }
@@ -804,10 +899,12 @@
       const region = intVal("individualRegion", 0);
       const bucket = document.getElementById("individualBucket").value.trim();
       const fileNamePrefix = arrayVal("individualFileNamePrefix");
+
       if (!accessKey || !secretKey || !bucket) {
         document.getElementById("response").textContent = "Error: Storage Access Key, Secret Key, and Bucket are required.";
         return null;
       }
+
       const request = {
         cname,
         uid,
@@ -824,9 +921,17 @@
             unsubscribeAudioUids,
             subscribeUidGroup
           },
-          storageConfig: { accessKey, secretKey, region, vendor, bucket, fileNamePrefix }
+          storageConfig: {
+            accessKey,
+            secretKey,
+            region,
+            vendor,
+            bucket,
+            fileNamePrefix
+          }
         }
       };
+
       if (shouldIncludeMp4()) {
         request.clientRequest.recordingFileConfig = { avFileType: ["hls", "mp4"] };
       }
@@ -848,10 +953,12 @@
       const region = intVal("webRegion", 0);
       const bucket = document.getElementById("webBucket").value.trim();
       const fileNamePrefix = arrayVal("webFileNamePrefix");
+
       if (!accessKey || !secretKey || !bucket) {
         document.getElementById("response").textContent = "Error: Storage Access Key, Secret Key, and Bucket are required.";
         return null;
       }
+
       const request = {
         cname,
         uid,
@@ -862,12 +969,26 @@
             extensionServices: [{
               serviceName: "web_recorder_service",
               errorHandlePolicy: "error_abort",
-              serviceParam: { url: webUrl, audioProfile, videoWidth, videoHeight, maxRecordingHour }
+              serviceParam: {
+                url: webUrl,
+                audioProfile,
+                videoWidth,
+                videoHeight,
+                maxRecordingHour
+              }
             }]
           },
-          storageConfig: { accessKey, secretKey, vendor, region, bucket, fileNamePrefix }
+          storageConfig: {
+            accessKey,
+            secretKey,
+            vendor,
+            region,
+            bucket,
+            fileNamePrefix
+          }
         }
       };
+
       if (shouldIncludeMp4()) {
         request.clientRequest.recordingFileConfig = { avFileType: ["hls", "mp4"] };
       }
@@ -897,10 +1018,9 @@
         responseEl.textContent = "Error: Channel name and UID are required.";
         return;
       }
-      // Animate a cartoon cloud flying across the screen
       animateCloud();
       const body = buildStartRequestBody();
-      if (!body) return; // Validation error already shown
+      if (!body) return; 
       const urlMode = getUrlMode();
       const url = `https://api.agora.io/v1/apps/${appid}/cloud_recording/resourceid/${globalResourceId}/mode/${urlMode}/start`;
       try {
@@ -918,7 +1038,6 @@
       }
     }
 
-    /* ---------------- UPDATE (POST) ---------------- */
     function buildUpdateBodyCompositeOrIndividual(cname, uid, subVid, unsubVid, subAud, unsubAud) {
       return {
         cname,
@@ -951,7 +1070,11 @@
       }
       else if (globalMode === "web") {
         const webOnHold = document.getElementById("webOnHoldCheckbox").checked;
-        return { cname, uid, clientRequest: { webRecordingConfig: { onhold: webOnHold } } };
+        return {
+          cname,
+          uid,
+          clientRequest: { webRecordingConfig: { onhold: webOnHold } }
+        };
       }
       return { cname, uid, clientRequest: {} };
     }
@@ -1004,14 +1127,83 @@
         });
         const data = await resp.json();
         responseEl.textContent = JSON.stringify(data, null, 2);
+
+        // If we're including MP4, parse the file list, pick the .mp4 to auto-play
+        if (shouldIncludeMp4() && data.serverResponse && Array.isArray(data.serverResponse.fileList)) {
+          let m3u8File = null;
+          let mp4File = null;
+
+          for (const f of data.serverResponse.fileList) {
+            if (f.fileName.endsWith(".m3u8")) {
+              m3u8File = f.fileName;
+            } else if (f.fileName.endsWith(".mp4")) {
+              mp4File = f.fileName;
+            }
+          }
+
+          if (mp4File) {
+            globalFileName = mp4File;
+            const mp4Url = generatePublicURL();
+            if (document.getElementById("playLiveVideoCheckbox").checked && mp4Url) {
+              const videoPlayer = document.getElementById("videoPlayer");
+              handleVideoPlayback(mp4Url, videoPlayer);
+              document.getElementById("publicUrlInput").value = mp4Url;
+              document.getElementById("videoPlayerContainer").classList.remove("hidden");
+            }
+          }
+
+          // Show a "Copy M3U8 link" button if we have it
+          if (m3u8File) {
+            const m3u8Url = generateUrlForFileName(m3u8File);
+            currentM3u8Url = m3u8Url;
+            // Show the button next to the Public URL input
+            document.getElementById("copyM3u8LinkBtn").classList.remove("hidden");
+          } else {
+            // Hide the button if no .m3u8
+            document.getElementById("copyM3u8LinkBtn").classList.add("hidden");
+            currentM3u8Url = "";
+          }
+        }
       } catch (error) {
         responseEl.textContent = error.toString();
       }
     }
 
+    // Helper to generate a URL for a custom filename
+    function generateUrlForFileName(fileName) {
+      const { bucket, vendor, region } = getStorageConfigForCurrentMode();
+      const regionText = getRegionText(vendor, region);
+      let url = "";
+      switch(vendor) {
+        case 1:
+          url = `https://${bucket}.s3.${normalizeRegion(regionText)}.amazonaws.com/${fileName}`;
+          break;
+        case 2:
+          url = `https://${bucket}.oss-${normalizeRegion(regionText)}.aliyuncs.com/${fileName}`;
+          break;
+        case 3:
+          url = `https://${bucket}.cos.${normalizeRegion(regionText)}.myqcloud.com/${fileName}`;
+          break;
+        case 5:
+          url = `https://${bucket}.blob.core.windows.net/${fileName}`;
+          break;
+        case 6:
+          url = `https://storage.googleapis.com/${bucket}/${fileName}`;
+          break;
+        case 7:
+          url = `https://${bucket}.obs.${normalizeRegion(regionText)}.myhuaweicloud.com/${fileName}`;
+          break;
+        case 8:
+          url = `https://${bucket}.bcebos.com/${fileName}`;
+          break;
+        default:
+          url = "";
+      }
+      return url;
+    }
+
     /* ---------------- QUERY with AUTO-REFRESH ---------------- */
     async function queryRecording() {
-      // Animate the cloud when auto querying
       animateCloud();
       const queryResultEl = document.getElementById("queryResult");
       const appid = document.getElementById("appid").value.trim();
@@ -1025,7 +1217,6 @@
       if (document.hidden) return;
       queryResultEl.textContent = "Querying recording...";
       const urlMode = getUrlMode();
-      
       const url = `https://api.agora.io/v1/apps/${appid}/cloud_recording/resourceid/${resourceId}/sid/${sid}/mode/${urlMode}/query`;
       try {
         const resp = await fetch(url, {
@@ -1034,17 +1225,28 @@
         });
         const data = await resp.json();
         queryResultEl.textContent = JSON.stringify(data, null, 2);
-        globalFileName = data.serverResponse.fileList[0].fileName || "";
-        console.log(document.getElementById("playLiveVideoCheckbox").checked);
-        if (document.getElementById("playLiveVideoCheckbox").checked) {
-          const videoPlayer = document.getElementById("videoPlayer");
-          const publicURL = generatePublicURL();
-          if (publicURL) {
-            videoPlayer.src = publicURL;
-            console.log("Public URL:", publicURL);
-            // Update the editable URL field with the generated URL
-            document.getElementById("publicUrlInput").value = publicURL;
-            document.getElementById("videoPlayerContainer").classList.remove("hidden");
+
+        // Only update if there's a new filename
+        const serverName = data.serverResponse?.fileList?.[0]?.fileName || "";
+        if (serverName && serverName !== lastQueriedFileName) {
+          lastQueriedFileName = serverName;
+          // If composite mode and ends with .m3u8, rename
+          let playableName = serverName;
+          if (globalMode === "composite" && serverName.endsWith(".m3u8")) {
+            const { fileNamePrefix } = getStorageConfigForCurrentMode();
+            playableName = renameM3u8ForComposite(serverName, !!fileNamePrefix);
+          }
+
+          globalFileName = playableName;
+
+          if (document.getElementById("playLiveVideoCheckbox").checked) {
+            const videoPlayer = document.getElementById("videoPlayer");
+            const publicURL = generatePublicURL();
+            if (publicURL) {
+              handleVideoPlayback(publicURL, videoPlayer);
+              document.getElementById("publicUrlInput").value = publicURL;
+              document.getElementById("videoPlayerContainer").classList.remove("hidden");
+            }
           }
         }
       } catch (error) {
@@ -1056,25 +1258,47 @@
       stopAutoQuery();
       isAutoQueryActive = true;
       queryRecording();
-      queryIntervalId = setInterval(() => { if (isAutoQueryActive) queryRecording(); }, 10000);
+      queryIntervalId = setInterval(() => {
+        if (isAutoQueryActive) queryRecording();
+      }, 10000);
     }
 
     function stopAutoQuery() {
       isAutoQueryActive = false;
-      if (queryIntervalId) { clearInterval(queryIntervalId); queryIntervalId = null; }
+      if (queryIntervalId) {
+        clearInterval(queryIntervalId);
+        queryIntervalId = null;
+      }
     }
 
     /* ---------------- BUTTON HANDLERS ---------------- */
-    function onAcquireClick() { stopAutoQuery(); acquireRecording(); }
-    function onStartClick() { stopAutoQuery(); startRecording(); }
-    function onUpdateClick() { stopAutoQuery(); updateRecording(); }
-    function onStopClick() { stopAutoQuery(); stopRecording(); }
-    function onQueryClick() { startAutoQuery(); }
+    function onAcquireClick() {
+      stopAutoQuery();
+      acquireRecording();
+    }
+    function onStartClick() {
+      stopAutoQuery();
+      startRecording();
+    }
+    function onUpdateClick() {
+      stopAutoQuery();
+      updateRecording();
+    }
+    function onStopClick() {
+      stopAutoQuery();
+      stopRecording();
+    }
+    function onQueryClick() {
+      startAutoQuery();
+    }
 
     /* ---------------- COPY REQUEST BODY BUTTONS ---------------- */
     function copyStartRequestBody() {
       const body = buildStartRequestBody();
-      if (!body) { alert("Start request body is invalid or missing required fields."); return; }
+      if (!body) {
+        alert("Start request body is invalid or missing required fields.");
+        return;
+      }
       const bodyString = JSON.stringify(body, null, 2);
       navigator.clipboard.writeText(bodyString).then(() => {
         alert("Start request body copied to clipboard!");
@@ -1085,7 +1309,10 @@
 
     function copyUpdateRequestBody() {
       const body = buildUpdateBody();
-      if (!body) { alert("Update request body is invalid or missing required fields."); return; }
+      if (!body) {
+        alert("Update request body is invalid or missing required fields.");
+        return;
+      }
       const bodyString = JSON.stringify(body, null, 2);
       navigator.clipboard.writeText(bodyString).then(() => {
         alert("Update request body copied to clipboard!");
@@ -1098,24 +1325,19 @@
     function animateCloud() {
       const cloud = document.createElement('div');
       cloud.classList.add('cloud-animation');
-      // Inline SVG for a cartoon cloud
       cloud.innerHTML = `
     <svg width="400" height="300" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <!-- Define a soft blue gradient for the cloud fill -->
         <linearGradient id="cloudGradient" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#B3E5FC"/>
           <stop offset="100%" stop-color="#81D4FA"/>
         </linearGradient>
       </defs>
       <g>
-        <!-- Overlapping ellipses form a gentle cloud shape -->
         <ellipse cx="150" cy="150" rx="50" ry="35" fill="url(#cloudGradient)" />
         <ellipse cx="210" cy="130" rx="45" ry="30" fill="url(#cloudGradient)" />
         <ellipse cx="270" cy="150" rx="50" ry="35" fill="url(#cloudGradient)" />
         <ellipse cx="210" cy="170" rx="60" ry="40" fill="url(#cloudGradient)" />
-        
-        <!-- Text inside the cloud -->
         <text x="210" y="155" text-anchor="middle" fill="#fff" font-size="30" font-family="Arial" dy=".3em">
           Agora
         </text>
