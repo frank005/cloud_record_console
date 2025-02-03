@@ -1246,13 +1246,10 @@
           // If composite mode and ends with .m3u8, rename
           let playableName = serverName;
           let exists = false;
-          let renamedFile = renameM3u8ForComposite(newFileName, !!fileNamePrefix);
-          let m3u8Url = generateUrlForFileName(renamedFile);
           
           if (globalMode === "composite" && serverName.endsWith(".m3u8")) {
             const { fileNamePrefix } = getStorageConfigForCurrentMode();
             playableName = renameM3u8ForComposite(serverName, !!fileNamePrefix);
-            exists = await checkM3U8Exists(m3u8Url);
           }
 
           globalFileName = playableName;
