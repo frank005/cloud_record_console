@@ -186,6 +186,9 @@
 
     let globalFileName = "";
     let lastQueriedFileName = "";
+    let hasFoundPlayableUrl = false;
+    // We still keep track of the lastQueriedFileName and lastPlayableName:
+    let lastPlayableName = "";
 
     /* ---------------- STORAGE OPTIONS ---------------- */
     const storageOptions = {
@@ -1203,72 +1206,111 @@
 
     let lastM3u8Url = "";
     let m3u8NeedsRecheck = false;
+    var globalExists = false;
 
     async function checkM3U8Exists(url) {
         try {
             const response = await fetch(url, { method: "HEAD" });
+            globalExists = true;
             return response.status === 200;
         } catch {
+            globalExists = false;
             return false;
         }
         }
-
+    
     /* ---------------- QUERY with AUTO-REFRESH ---------------- */
     async function queryRecording() {
-      animateCloud();
-      const queryResultEl = document.getElementById("queryResult");
-      const appid = document.getElementById("appid").value.trim();
-      const resourceId = document.getElementById("resourceId").value.trim() || globalResourceId;
-      const sid = document.getElementById("sid").value.trim() || globalSid;
-      if (!resourceId || !sid) {
-        queryResultEl.textContent = "Error: resourceId or sid is empty.";
-        stopAutoQuery();
-        return;
+  animateCloud();
+  const queryResultEl = document.getElementById("queryResult");
+  const appid = document.getElementById("appid").value.trim();
+
+  // Either use manual ResourceId / SID fields, or your globalResourceId / globalSid:
+  const resourceId = document.getElementById("resourceId").value.trim() || globalResourceId;
+  const sid = document.getElementById("sid").value.trim() || globalSid;
+  if (!resourceId || !sid) {
+    queryResultEl.textContent = "Error: resourceId or sid is empty.";
+    stopAutoQuery();
+    return;
+  }
+
+  if (document.hidden) {
+    // (Optional) Skip queries when the tab is not visible
+    return;
+  }
+
+  queryResultEl.textContent = "Querying recording...";
+  const urlMode = getUrlMode(); // "mix" for composite, or "web"/"individual" otherwise
+  const queryUrl = `https://api.agora.io/v1/apps/${appid}/cloud_recording/resourceid/${resourceId}/sid/${sid}/mode/${urlMode}/query`;
+
+  try {
+    const resp = await fetch(queryUrl, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": getAuthHeaders()
       }
-      if (document.hidden) return;
-      queryResultEl.textContent = "Querying recording...";
-      const urlMode = getUrlMode();
-      const url = `https://api.agora.io/v1/apps/${appid}/cloud_recording/resourceid/${resourceId}/sid/${sid}/mode/${urlMode}/query`;
-      try {
-        const resp = await fetch(url, {
-          method: "GET",
-          headers: { "Content-Type": "application/json", "Authorization": getAuthHeaders() }
-        });
-        const data = await resp.json();
-        queryResultEl.textContent = JSON.stringify(data, null, 2);
+    });
+    const data = await resp.json();
+    queryResultEl.textContent = JSON.stringify(data, null, 2);
 
-        let newFileName = data.serverResponse?.fileList?.[0]?.fileName || "";
-        
-        // Only update if there's a new filename
-        const serverName = data.serverResponse?.fileList?.[0]?.fileName || "";
-        if (serverName && serverName !== lastQueriedFileName) {
-          lastQueriedFileName = serverName;
-          // If composite mode and ends with .m3u8, rename
-          let playableName = serverName;
-          let exists = false;
-          
-          if (globalMode === "composite" && serverName.endsWith(".m3u8")) {
-            const { fileNamePrefix } = getStorageConfigForCurrentMode();
-            playableName = renameM3u8ForComposite(serverName, !!fileNamePrefix);
-          }
+    const serverFileList = data.serverResponse?.fileList;
+    if (!Array.isArray(serverFileList) || serverFileList.length === 0) {
+      // No file in the response yet
+      return;
+    }
+    const serverName = serverFileList[0]?.fileName || "";
+    if (!serverName) return;
 
-          globalFileName = playableName;
-
-          if (document.getElementById("playLiveVideoCheckbox").checked) {
-            const videoPlayer = document.getElementById("videoPlayer");
-            const publicURL = generatePublicURL();
-            if (publicURL) {
-              handleVideoPlayback(publicURL, videoPlayer);
-              document.getElementById("publicUrlInput").value = publicURL;
-              document.getElementById("videoPlayerContainer").classList.remove("hidden");
-            }
-          }
-        }
-      } catch (error) {
-        queryResultEl.textContent = error.toString();
-      }
+    // If we've *already* found a playable URL (got 200), do nothing more:
+    if (hasFoundPlayableUrl) {
+      // We won't keep re-checking HEAD or rewriting the player source
+      return;
     }
 
+    // ---- We haven't found a playable file yet, so do rename (if composite) + HEAD check ----
+
+    // If it's the *first time* we see this serverName, or if you want to handle "new" files:
+    if (serverName !== lastQueriedFileName) {
+      lastQueriedFileName = serverName;
+
+      // If composite + .m3u8 => rename once; else just keep the original name
+      if (globalMode === "composite" && serverName.endsWith(".m3u8")) {
+        const { fileNamePrefix } = getStorageConfigForCurrentMode();
+        lastPlayableName = renameM3u8ForComposite(serverName, !!fileNamePrefix);
+      } else {
+        lastPlayableName = serverName;
+      }
+    }
+    
+    // Generate the public URL for *lastPlayableName* (which might have the "live_" prefix in composite mode)
+    const publicURL = generateUrlForFileName(lastPlayableName);
+
+    // Optionally: show it to the user even if it doesn’t exist yet
+    document.getElementById("publicUrlInput").value = publicURL;
+    console.log("publicUrlInput: " + publicUrlInput.value);
+
+    // HEAD check to see if the file is actually present
+    const exists = await checkM3U8Exists(publicURL);
+    if (exists) {
+      // Once we get 200, we mark that we found our playable file:
+      hasFoundPlayableUrl = true;
+
+      // If user wants to play live video, do it now:
+      if (document.getElementById("playLiveVideoCheckbox").checked) {
+        const videoPlayer = document.getElementById("videoPlayer");
+        handleVideoPlayback(publicURL, videoPlayer);
+        document.getElementById("videoPlayerContainer").classList.remove("hidden");
+      }
+    } else {
+      console.log("File not yet available at:", publicURL);
+      // Next queryRecording() call (in ~10s) will HEAD-check again
+    }
+
+  } catch (error) {
+    queryResultEl.textContent = error.toString();
+  }
+}
     function startAutoQuery() {
       stopAutoQuery();
       isAutoQueryActive = true;
@@ -1293,6 +1335,10 @@
     }
     function onStartClick() {
       stopAutoQuery();
+      hasFoundPlayableUrl = false;
+      lastQueriedFileName = "";
+      lastPlayableName = "";
+      globalFileName = "";
       startRecording();
     }
     function onUpdateClick() {
