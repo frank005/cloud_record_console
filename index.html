@@ -84,6 +84,12 @@
             <label for="mp4Checkbox" class="text-sm">Include MP4 in recordingFileConfig?</label>
           </div>
 
+          <!-- Snapshot Config Checkbox -->
+          <div class="flex items-center">
+            <input type="checkbox" id="snapshotCheckbox" class="mr-2 h-4 w-4" />
+            <label for="snapshotCheckbox" class="text-sm">Include Snapshot Config?</label>
+          </div>
+
           <!-- Buttons to Acquire, Start, Update, Stop -->
           <div class="grid grid-cols-2 gap-2">
             <button id="acquireBtn" class="bg-green-600 hover:bg-green-700 p-2 rounded font-bold">Acquire</button>
@@ -348,6 +354,20 @@
       document.getElementById("copyM3u8LinkBtn").addEventListener("click", () => {
         if (currentM3u8Url) copyToClipboard(currentM3u8Url);
       });
+
+      // Snapshot checkbox event listener
+      document.getElementById("snapshotCheckbox").addEventListener("change", function() {
+        const compositeConfig = document.getElementById("compositeSnapshotConfig");
+        const individualConfig = document.getElementById("individualSnapshotConfig");
+        
+        if (this.checked) {
+          compositeConfig.classList.remove("hidden");
+          individualConfig.classList.remove("hidden");
+        } else {
+          compositeConfig.classList.add("hidden");
+          individualConfig.classList.add("hidden");
+        }
+      });
     };
 
     function toggleAuthPopup() {
@@ -470,6 +490,18 @@
         <label class="block text-sm font-semibold">Region:</label>
         <select id="compositeRegion" class="w-full p-2 rounded bg-gray-700 text-white"></select>
         <input id="compositeFileNamePrefix" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="File Name Prefix (comma-separated)"/>
+        
+        <!-- Snapshot Config for Composite -->
+        <div id="compositeSnapshotConfig" class="hidden">
+          <p class="text-sm font-semibold mt-2">Snapshot Config:</p>
+          <input id="compositeSnapshotCaptureInterval" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Capture Interval (default=10)" value="10"/>
+          <label class="block text-sm font-semibold">File Type:</label>
+          <select id="compositeSnapshotFileType" class="w-full p-2 rounded bg-gray-700 text-white">
+            <option value="jpg" selected>jpg</option>
+            <option value="png">png</option>
+          </select>
+        </div>
+        
         <hr class="border-gray-600 my-2" />
         <p class="text-sm font-semibold">Update (Composite):</p>
         <p class="text-sm">Update will only modify subscribe/unsubscribe UIDs for Audio/Video.</p>
@@ -521,6 +553,18 @@
         <label class="block text-sm font-semibold">Region:</label>
         <select id="individualRegion" class="w-full p-2 rounded bg-gray-700 text-white"></select>
         <input id="individualFileNamePrefix" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="File Name Prefix (comma-separated)"/>
+        
+        <!-- Snapshot Config for Individual -->
+        <div id="individualSnapshotConfig" class="hidden">
+          <p class="text-sm font-semibold mt-2">Snapshot Config:</p>
+          <input id="individualSnapshotCaptureInterval" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Capture Interval (default=10)" value="10"/>
+          <label class="block text-sm font-semibold">File Type:</label>
+          <select id="individualSnapshotFileType" class="w-full p-2 rounded bg-gray-700 text-white">
+            <option value="jpg" selected>jpg</option>
+            <option value="png">png</option>
+          </select>
+        </div>
+        
         <hr class="border-gray-600 my-2" />
         <p class="text-sm font-semibold">Update (Individual):</p>
         <p class="text-sm">Update will only modify subscribe/unsubscribe UIDs for Audio/Video.</p>
@@ -559,6 +603,7 @@
         <label class="block text-sm font-semibold">Region:</label>
         <select id="webRegion" class="w-full p-2 rounded bg-gray-700 text-white"></select>
         <input id="webFileNamePrefix" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="File Name Prefix (comma-separated)"/>
+        
         <hr class="border-gray-600 my-2" />
         <p class="text-sm font-semibold">Update (Web):</p>
         <p class="text-sm">Only toggles onHold (true/false).</p>
@@ -805,6 +850,24 @@
       return document.getElementById("mp4Checkbox").checked;
     }
 
+    /* ---------------- SHOULD INCLUDE SNAPSHOT? ---------------- */
+    function shouldIncludeSnapshot() {
+      return document.getElementById("snapshotCheckbox").checked;
+    }
+
+    /* ---------------- GET SNAPSHOT CONFIG ---------------- */
+    function getSnapshotConfig(mode) {
+      if (!shouldIncludeSnapshot()) return null;
+      
+      const captureInterval = intVal(mode + "SnapshotCaptureInterval", 10);
+      const fileType = document.getElementById(mode + "SnapshotFileType").value;
+      
+      return {
+        captureInterval,
+        fileType: [fileType]
+      };
+    }
+
     /* ---------------- START ---------------- */
     function buildStartBodyComposite() {
       const cname = document.getElementById("cname").value.trim();
@@ -876,6 +939,12 @@
         }
       };
 
+      // Add snapshot config if enabled
+      const snapshotConfig = getSnapshotConfig("composite");
+      if (snapshotConfig) {
+        request.clientRequest.snapshotConfig = snapshotConfig;
+      }
+
       if (shouldIncludeMp4()) {
         request.clientRequest.recordingFileConfig = { avFileType: ["hls", "mp4"] };
       }
@@ -934,6 +1003,12 @@
         }
       };
 
+      // Add snapshot config if enabled
+      const snapshotConfig = getSnapshotConfig("individual");
+      if (snapshotConfig) {
+        request.clientRequest.snapshotConfig = snapshotConfig;
+      }
+
       if (shouldIncludeMp4()) {
         request.clientRequest.recordingFileConfig = { avFileType: ["hls", "mp4"] };
       }
@@ -990,6 +1065,8 @@
           }
         }
       };
+
+
 
       if (shouldIncludeMp4()) {
         request.clientRequest.recordingFileConfig = { avFileType: ["hls", "mp4"] };
