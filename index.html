@@ -425,6 +425,16 @@
         container.innerHTML = getWebFieldsHTML();
       }
       updateStorageRegion(globalMode); // Re-populate region dropdown
+      
+      // Check if snapshot checkbox is checked and show/hide config accordingly
+      const snapshotCheckbox = document.getElementById("snapshotCheckbox");
+      if (snapshotCheckbox && snapshotCheckbox.checked) {
+        const compositeConfig = document.getElementById("compositeSnapshotConfig");
+        const individualConfig = document.getElementById("individualSnapshotConfig");
+        
+        if (compositeConfig) compositeConfig.classList.remove("hidden");
+        if (individualConfig) individualConfig.classList.remove("hidden");
+      }
     }
 
     function getCompositeFieldsHTML() {
