@@ -361,11 +361,11 @@
         const individualConfig = document.getElementById("individualSnapshotConfig");
         
         if (this.checked) {
-          compositeConfig.classList.remove("hidden");
-          individualConfig.classList.remove("hidden");
+          if (compositeConfig) compositeConfig.classList.remove("hidden");
+          if (individualConfig) individualConfig.classList.remove("hidden");
         } else {
-          compositeConfig.classList.add("hidden");
-          individualConfig.classList.add("hidden");
+          if (compositeConfig) compositeConfig.classList.add("hidden");
+          if (individualConfig) individualConfig.classList.add("hidden");
         }
       });
     };
